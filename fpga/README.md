@@ -18,16 +18,20 @@ Zynq-7000.
 | `s_axi_aclk`               | `FCLK_CLK0` (100 MHz — the default timer values assume this)     |
 | `s_axi_aresetn`            | `proc_sys_reset_0/peripheral_aresetn`                           |
 | `s_axi`                    | `M_AXI_GP0` via AXI SmartConnect / Interconnect                 |
-| `sw_req`, `sw_target`      | payload mode adapter (Block 4)                                  |
-| `sw_ack`, `pl_mode`        | payload mode adapter (Block 4)                                  |
+| `sw_req`, `sw_target`      | `pl_axil` (Block 4) `sw_req`, `sw_target`                       |
+| `sw_ack`, `pl_mode`        | `pl_axil` (Block 4) `sw_ack`, `pl_mode`                         |
 | `fault`                    | `IRQ_F2P` (through `xlconcat`)                                  |
 | `sw_window`                | EMIO GPIO or the injection controller, to time switch-window campaigns (RQ4) |
 | `mode_cmd`, `fallback`, `threat_level` | LEDs / ILA (optional)                               |
 
-4. In the Address Editor, give the controller a 4 KB segment (it decodes 256 B).
-5. Parameters: keep `TMR = 1` for the protected build. Build `TMR = 0` as well
+4. Add the payload the same way (**Add Module…** → `pl_axil`, sources `rtl/payload/*.v`,
+   `rtl/axil_slave.v`, `rtl/tmr_voter.v`) and connect its `s_axi` to the same
+   interconnect. Set `VARIANT` (0 baseline, 1 static TMR, 2 switchable); build all
+   three variants for the RQ5 comparison.
+5. In the Address Editor, give each IP a 4 KB segment (each decodes 256 B).
+6. Parameters: keep `TMR = 1` for the protected build. Build `TMR = 0` as well
    if you want the protected/unprotected vulnerability comparison.
-6. Add `astro_ctrl_pblock.xdc` once the instance name is known (check the
+7. Add `astro_ctrl_pblock.xdc` once the instance name is known (check the
    `get_cells` filter).
 
 The RTL carries `DONT_TOUCH` / `KEEP` on the three domains and voters. Check in

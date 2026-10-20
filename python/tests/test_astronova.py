@@ -9,6 +9,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from astronova import payload as PL                                # noqa: E402
 from astronova import regs as R                                    # noqa: E402
 from astronova.driver import AstroCtrl                              # noqa: E402
 from astronova.model import CtrlModel, IdealPayload, simulate_timeline  # noqa: E402
@@ -53,6 +54,21 @@ class TestFraming(unittest.TestCase):
     def test_q88(self):
         self.assertEqual(R.q88(1.0), 0x100)
         self.assertEqual(R.q88(2.25), 0x240)
+
+
+class TestPayloadGolden(unittest.TestCase):
+    def test_zero_seed_maps_to_one(self):
+        self.assertEqual(PL.seed_state(0)["lfsr"], 1)
+
+    def test_iteration_count_and_determinism(self):
+        a, b = PL.run(0x1234ABCD, 1000), PL.run(0x1234ABCD, 1000)
+        self.assertEqual(a, b)
+        self.assertEqual(a["cnt"], 1000)
+        self.assertNotEqual(PL.run(0x1234ABCD, 999)["sig"], a["sig"])
+
+    def test_known_value(self):
+        # pinned to the value tb_system.v checks the RTL against
+        self.assertEqual(PL.run(0x1234ABCD, 8000)["sig"], 0xFC0B8318)
 
 
 class TestDriverOnModel(unittest.TestCase):

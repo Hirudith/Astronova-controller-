@@ -12,7 +12,7 @@
 //   4. payload drops sw_ack; the switch window is closed
 // pl_mode must always report the mode the payload is actually running in.
 //
-// Only full 32-bit writes are performed; partial-strobe writes get SLVERR.
+// Bus protocol: axil_slave.v (full 32-bit writes only; partial strobes get SLVERR).
 // The AXI protocol logic sits outside the TMR boundary: an upset here can
 // corrupt one bus transaction, which the telemetry CRC/sequence checks catch.
 
@@ -36,7 +36,6 @@ module astro_ctrl_axil #(
     input  wire        s_axi_aclk,
     input  wire        s_axi_aresetn,
 
-    /* verilator lint_off UNUSEDSIGNAL */   // prot ignored, addr[1:0] ignored (word access)
     input  wire [7:0]  s_axi_awaddr,
     input  wire [2:0]  s_axi_awprot,
     input  wire        s_axi_awvalid,
@@ -45,17 +44,16 @@ module astro_ctrl_axil #(
     input  wire [3:0]  s_axi_wstrb,
     input  wire        s_axi_wvalid,
     output wire        s_axi_wready,
-    output reg  [1:0]  s_axi_bresp,
-    output reg         s_axi_bvalid,
+    output wire [1:0]  s_axi_bresp,
+    output wire        s_axi_bvalid,
     input  wire        s_axi_bready,
     input  wire [7:0]  s_axi_araddr,
     input  wire [2:0]  s_axi_arprot,
-    /* verilator lint_on UNUSEDSIGNAL */
     input  wire        s_axi_arvalid,
     output wire        s_axi_arready,
-    output reg  [31:0] s_axi_rdata,
+    output wire [31:0] s_axi_rdata,
     output wire [1:0]  s_axi_rresp,
-    output reg         s_axi_rvalid,
+    output wire        s_axi_rvalid,
     input  wire        s_axi_rready,
 
     // payload mode-switch interface
@@ -77,74 +75,25 @@ module astro_ctrl_axil #(
     wire rst = ~s_axi_aresetn;
 
     // ------------------------------------------------------------------
-    // AXI4-Lite write channel -> single-cycle register write strobe
+    // AXI4-Lite -> register-file strobes
     // ------------------------------------------------------------------
-    reg        aw_done, w_done;
-    /* verilator lint_off UNUSEDSIGNAL */
-    reg [7:0]  awaddr_q;
-    /* verilator lint_on UNUSEDSIGNAL */
-    reg [31:0] wdata_q;
-    reg [3:0]  wstrb_q;
-    reg        wr_en;
-
-    assign s_axi_awready = !aw_done && !s_axi_bvalid;
-    assign s_axi_wready  = !w_done  && !s_axi_bvalid;
-
-    always @(posedge clk) begin
-        if (rst) begin
-            aw_done      <= 1'b0;
-            w_done       <= 1'b0;
-            awaddr_q     <= 8'd0;
-            wdata_q      <= 32'd0;
-            wstrb_q      <= 4'd0;
-            wr_en        <= 1'b0;
-            s_axi_bvalid <= 1'b0;
-            s_axi_bresp  <= 2'b00;
-        end else begin
-            wr_en <= 1'b0;
-            if (s_axi_awvalid && s_axi_awready) begin
-                awaddr_q <= s_axi_awaddr;
-                aw_done  <= 1'b1;
-            end
-            if (s_axi_wvalid && s_axi_wready) begin
-                wdata_q <= s_axi_wdata;
-                wstrb_q <= s_axi_wstrb;
-                w_done  <= 1'b1;
-            end
-            if (aw_done && w_done && !s_axi_bvalid) begin
-                wr_en        <= (wstrb_q == 4'hF);
-                s_axi_bresp  <= (wstrb_q == 4'hF) ? 2'b00 : 2'b10;   // OKAY / SLVERR
-                s_axi_bvalid <= 1'b1;
-                aw_done      <= 1'b0;
-                w_done       <= 1'b0;
-            end
-            if (s_axi_bvalid && s_axi_bready)
-                s_axi_bvalid <= 1'b0;
-        end
-    end
-
-    wire [5:0] wr_addr = awaddr_q[7:2];
-
-    // ------------------------------------------------------------------
-    // AXI4-Lite read channel
-    // ------------------------------------------------------------------
-    wire [5:0]  rd_addr = s_axi_araddr[7:2];
+    wire        wr_en;
+    wire [5:0]  wr_addr, rd_addr;
+    wire [31:0] wdata_q;
     wire [31:0] core_rd, diag_rd;
 
-    assign s_axi_arready = !s_axi_rvalid;
-    assign s_axi_rresp   = 2'b00;
-
-    always @(posedge clk) begin
-        if (rst) begin
-            s_axi_rvalid <= 1'b0;
-            s_axi_rdata  <= 32'd0;
-        end else if (s_axi_arvalid && s_axi_arready) begin
-            s_axi_rvalid <= 1'b1;
-            s_axi_rdata  <= rd_addr[5] ? diag_rd : core_rd;
-        end else if (s_axi_rvalid && s_axi_rready) begin
-            s_axi_rvalid <= 1'b0;
-        end
-    end
+    axil_slave u_axil (
+        .clk(clk), .rst(rst),
+        .s_axi_awaddr(s_axi_awaddr), .s_axi_awprot(s_axi_awprot), .s_axi_awvalid(s_axi_awvalid),
+        .s_axi_awready(s_axi_awready), .s_axi_wdata(s_axi_wdata), .s_axi_wstrb(s_axi_wstrb),
+        .s_axi_wvalid(s_axi_wvalid), .s_axi_wready(s_axi_wready), .s_axi_bresp(s_axi_bresp),
+        .s_axi_bvalid(s_axi_bvalid), .s_axi_bready(s_axi_bready), .s_axi_araddr(s_axi_araddr),
+        .s_axi_arprot(s_axi_arprot), .s_axi_arvalid(s_axi_arvalid), .s_axi_arready(s_axi_arready),
+        .s_axi_rdata(s_axi_rdata), .s_axi_rresp(s_axi_rresp), .s_axi_rvalid(s_axi_rvalid),
+        .s_axi_rready(s_axi_rready),
+        .wr_en(wr_en), .wr_addr(wr_addr), .wr_data(wdata_q),
+        .rd_addr(rd_addr), .rd_data(rd_addr[5] ? diag_rd : core_rd)
+    );
 
     // ------------------------------------------------------------------
     // Protected controller and diagnostics

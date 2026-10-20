@@ -1,8 +1,17 @@
-# Astronova: protected mode-selection controller (Block 3)
+# Astronova: adaptive fault tolerance for terrestrial SRAM-FPGAs
 
-This is the RTL for the space-weather-aware adaptive fault-tolerance project
-(Project Astronova, PYNQ-Z2 / XC7Z020). It is the always-protected block that
-turns threat telemetry into a protection mode for the payload:
+Hardware and analysis code for the space-weather-aware adaptive fault-tolerance
+project (Project Astronova, PYNQ-Z2 / XC7Z020).
+
+* **Block 3: protected controller** (`rtl/astro_ctrl_*`, [docs/SPEC.md](docs/SPEC.md))
+* **Block 4: switchable payload** (`rtl/payload/`, [docs/PAYLOAD.md](docs/PAYLOAD.md)):
+  baseline, static-TMR and switchable (SIMPLEX / DMR / TMR) variants, with
+  Level-1 switching and state resynchronisation.
+
+## Block 3: controller
+
+The controller is the always-protected block that turns threat telemetry into
+a protection mode for the payload:
 
 * telemetry integrity checks: CRC-8, reserved bits, source-quality flag,
   sequence order;
@@ -25,12 +34,14 @@ Board integration notes are in [fpga/README.md](fpga/README.md).
 ## Layout
 
 ```
-rtl/      astro_ctrl_axil.v (top), astro_ctrl_tmr.v, astro_ctrl_core.v,
-          tmr_voter.v, astro_ctrl_diag.v, astro_ctrl_defs.vh
-tb/       tb_directed.v (G1 cases + protocol monitors), tb_cosim.v (model equivalence, upset injection)
-python/   astronova/{regs,model,driver}.py, gen_cosim.py, tests/
-fpga/     Pblock template, Vivado / PYNQ integration notes
-docs/     SPEC.md
+rtl/          astro_ctrl_axil.v (controller top), astro_ctrl_tmr.v, astro_ctrl_core.v,
+              astro_ctrl_diag.v, astro_ctrl_defs.vh, tmr_voter.v, axil_slave.v
+rtl/payload/  pl_axil.v (payload top), pl_switchable.v, pl_workload.v
+tb/           tb_directed.v (controller G1 cases), tb_cosim.v (model equivalence, upset injection),
+              tb_system.v (controller + payload, all variants)
+python/       astronova/{regs,model,driver,payload}.py, gen_cosim.py, tests/
+fpga/         Pblock template, Vivado / PYNQ integration notes
+docs/         SPEC.md (controller), PAYLOAD.md (payload)
 ```
 
 ## Running the checks
@@ -38,8 +49,8 @@ docs/     SPEC.md
 Needs `iverilog`, `verilator` (5.x), `yosys` and `python3`.
 
 ```
-make all      # lint, Python tests, directed tests, co-simulation, upset injection (~2 min)
-make synth    # Yosys 7-series resource estimate for TMR=1 and TMR=0
+make all      # lint, Python tests, directed, co-simulation, injection, system tests (~3 min)
+make synth    # Yosys 7-series resource estimates: controller TMR=1/0, payload variants
 ```
 
 Status (validation level V1, simulation only):
@@ -54,6 +65,10 @@ Status (validation level V1, simulation only):
   detected. Double flips are caught as mismatches (negative control).
 * Resource estimate (Yosys, TMR=1): 4,871 LUT / 1,940 FF, i.e. 9.2 % / 1.8 % of
   the XC7Z020. Vivado figures are still to be measured.
+* Controller + payload (`make system`): with every payload variant the final
+  workload state equals the golden model. The switchable variant runs 129
+  switches through all four modes with 1,065 injected upsets. The negative
+  controls corrupt the result as expected. Level-1 switch latency is 2 cycles.
 
 ## Using the reference model in Block 5
 

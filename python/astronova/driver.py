@@ -13,6 +13,9 @@ Anything with read(offset) / write(offset, value) works as `mmio`, which lets
 the same code drive the cycle model in tests.
 """
 
+import time
+
+from . import payload as PL
 from . import regs as R
 
 
@@ -138,3 +141,61 @@ class AstroCtrl:
             lo = self.read(R.CYCLE_LO)
             hi = self.read(R.CYCLE_HI)
         return (hi << 32) | lo
+
+
+class Payload:
+    """PS-side control of the switchable payload (rtl/payload/pl_axil.v)."""
+
+    def __init__(self, mmio):
+        self.mmio = mmio
+        ident = self.read(PL.ID)
+        if ident != PL.PAYLOAD_ID:
+            raise RuntimeError(f"no Astronova payload at this address (ID=0x{ident:08x})")
+        self.variant = (self.read(PL.VERSION) >> 16) & 0xFF
+
+    @classmethod
+    def from_overlay(cls, ip):
+        return cls(ip.mmio)
+
+    def read(self, off):
+        return self.mmio.read(off) & 0xFFFFFFFF
+
+    def write(self, off, value):
+        self.mmio.write(off, value & 0xFFFFFFFF)
+
+    def start(self, seed, iterations):
+        """Restart the workload from `seed`; it stops after `iterations`."""
+        self.write(PL.CTRL, 0)
+        self.write(PL.SEED, seed)
+        self.write(PL.STOP_AT, iterations)
+        self.write(PL.CMD, PL.CMD_CLEAR | PL.CMD_CLEAR_DIAG)
+        self.write(PL.CTRL, 1)
+
+    def done(self):
+        return bool(self.read(PL.STATUS) >> 5 & 1)
+
+    def wait(self, timeout_s=10.0, poll_s=1e-3):
+        t0 = time.monotonic()
+        while not self.done():
+            if time.monotonic() - t0 > timeout_s:
+                return False                         # hang
+            time.sleep(poll_s)
+        return True
+
+    def result(self):
+        return {"lfsr": self.read(PL.LFSR), "acc": self.read(PL.ACC),
+                "sig": self.read(PL.SIG), "cnt": self.read(PL.CNT)}
+
+    def check(self, seed, iterations):
+        """'ok', 'sdc' (silent data corruption) or 'hang', against the golden model."""
+        if not self.done():
+            return "hang"
+        return "ok" if self.result() == PL.run(seed, iterations) else "sdc"
+
+    def status(self):
+        v = self.read(PL.STATUS)
+        return {"pl_mode": R.MODE_NAMES[v & 3], "active": (v >> 2) & 7, "done": bool(v >> 5 & 1),
+                "variant": PL.VARIANTS.get(self.variant, "?"),
+                "dmr_err_cycles": self.read(PL.DMR_ERR), "tmr_err_cycles": self.read(PL.TMR_ERR),
+                "switches": self.read(PL.SWITCHES),
+                "mode_cycles": [self.read(a) for a in PL.MODE_CYC]}
