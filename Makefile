@@ -1,7 +1,8 @@
 # Astronova protection controller -- verification and resource estimates.
 #
 #   make all        lint + python tests + directed + co-simulation + injection
-#   make synth      Yosys 7-series resource estimate (TMR=1 and TMR=0)
+#   make synth      Yosys 7-series resource estimates (controller, payload variants)
+#   make analysis   Blocks 1/2/5 pipeline (V1, placeholder inputs) -> build/analysis/
 #
 # Tools: iverilog (>= 11), verilator (>= 5, for --timing), yosys, python3.
 
@@ -18,7 +19,7 @@ SEEDS   := 1 2 3
 CYCLES  := 300000
 VFLAGS  := --binary --timing -Wno-fatal -Wno-WIDTH -Wno-STMTDLY -Wno-INITIALDLY -I$(RTL_DIR) -j 0
 
-.PHONY: all lint pytest directed cosim inject system synth clean
+.PHONY: all lint pytest directed cosim inject system synth analysis clean
 
 all: lint pytest directed cosim inject system
 	@echo "== all checks passed"
@@ -71,6 +72,10 @@ system: | $(BUILD)
 	      $$($(GOLDEN) --seed 0x0badf00d --plusargs B) | tee $(BUILD)/system_$$v.log | grep -E "switch|mode [0-3]|upsets|PASS|FAIL"; \
 	  grep -q "^PASS" $(BUILD)/system_$$v.log; \
 	done
+
+# Blocks 1, 2, 5: break-even table, alert-quality sweep, RQ1 check (V1, placeholder inputs)
+analysis: | $(BUILD)
+	cd python && python3 run_analysis.py --samples 100 --out ../$(BUILD)/analysis
 
 synth: | $(BUILD)
 	@for t in 1 0; do \

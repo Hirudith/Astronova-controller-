@@ -7,6 +7,10 @@ project (Project Astronova, PYNQ-Z2 / XC7Z020).
 * **Block 4: switchable payload** (`rtl/payload/`, [docs/PAYLOAD.md](docs/PAYLOAD.md)):
   baseline, static-TMR and switchable (SIMPLEX / DMR / TMR) variants, with
   Level-1 switching and state resynchronisation.
+* **Blocks 1, 2, 5: analysis** (`python/astronova/`, [docs/ANALYSIS.md](docs/ANALYSIS.md)):
+  λ(t) per site and event, alert timelines, and the evaluation engine with
+  policies P0–P4, break-even table and alert-quality sweep. This is a V1
+  pipeline: most inputs are still placeholders, and every output says so.
 
 ## Block 3: controller
 
@@ -39,9 +43,11 @@ rtl/          astro_ctrl_axil.v (controller top), astro_ctrl_tmr.v, astro_ctrl_c
 rtl/payload/  pl_axil.v (payload top), pl_switchable.v, pl_workload.v
 tb/           tb_directed.v (controller G1 cases), tb_cosim.v (model equivalence, upset injection),
               tb_system.v (controller + payload, all variants)
-python/       astronova/{regs,model,driver,payload}.py, gen_cosim.py, tests/
+python/       astronova/{regs,model,driver,payload}.py   controller/payload models, PS drivers
+              astronova/{inputs,environment,alerts,policy,evaluate}.py   analysis (Blocks 1, 2, 5)
+              run_analysis.py, gen_cosim.py, tests/
 fpga/         Pblock template, Vivado / PYNQ integration notes
-docs/         SPEC.md (controller), PAYLOAD.md (payload)
+docs/         SPEC.md (controller), PAYLOAD.md (payload), ANALYSIS.md (Blocks 1, 2, 5)
 ```
 
 ## Running the checks
@@ -51,6 +57,7 @@ Needs `iverilog`, `verilator` (5.x), `yosys` and `python3`.
 ```
 make all      # lint, Python tests, directed, co-simulation, injection, system tests (~3 min)
 make synth    # Yosys 7-series resource estimates: controller TMR=1/0, payload variants
+make analysis # Blocks 1/2/5 pipeline -> build/analysis/ (V1, placeholder inputs)
 ```
 
 Status (validation level V1, simulation only):
